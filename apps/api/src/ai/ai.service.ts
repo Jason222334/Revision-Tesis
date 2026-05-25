@@ -1,0 +1,125 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import * as mammoth from 'mammoth';
+
+@Injectable()
+export class AIService {
+  private readonly logger = new Logger(AIService.name);
+  private genAI: GoogleGenerativeAI;
+
+  constructor(private configService: ConfigService) {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    // Usamos el SDK oficial con los modelos vigentes en 2026
+    this.genAI = new GoogleGenerativeAI(apiKey || '');
+  }
+
+  async extractText(buffer: Buffer, mimetype: string): Promise<string> {
+    try {
+      if (mimetype.includes('word') || mimetype.includes('officedocument')) {
+        const result = await mammoth.extractRawText({ buffer });
+        return result.value;
+      }
+      return buffer.toString('utf8').substring(0, 10000);
+    } catch (error) {
+      this.logger.error(`Error en extracción Word: ${error.message}`);
+      return "Documento académico";
+    }
+  }
+
+  async analyzeTemplateMultimodal(buffer: Buffer, mimetype: string) {
+    this.logger.log('🚀 Google AI 2026: Analizando estructura con Gemini 2.5 Flash...');
+    
+    // MIGRACIÓN: Usamos gemini-2.5-flash (el estándar actual)
+    const model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `
+      Eres un experto revisor académico. Analiza el documento de GUÍA DE TESIS adjunto y extrae su estructura técnica.
+      RESPONDE ÚNICAMENTE EN FORMATO JSON con esta estructura exacta:
+      {
+        "sections": [
+          { "title": "Nombre", "description": "Contenido requerido", "isRequired": true }
+        ],
+        "formattingRules": {
+          "citationStyle": "APA/IEEE/etc",
+          "language": "es"
+        }
+      }
+    `;
+
+    try {
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: buffer.toString('base64'),
+            mimeType: mimetype
+          }
+        }
+      ]);
+
+      const response = await result.response;
+      const text = response.text();
+      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(jsonStr);
+    } catch (error) {
+      this.logger.error(`Error crítico en Gemini 2.5: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async analyzeSubmissionMultimodal(submissionBuffer: Buffer, mimetype: string, templateStructure: any) {
+    this.logger.log('🚀 Google AI 2026: Evaluando tesis con Gemini 2.5 Flash...');
+    
+    const model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `
+      Actúa como un revisor de tesis experto y sumamente detallista. Evalúa el avance adjunto comparándolo minuciosamente con este PATRÓN:
+      ${JSON.stringify(templateStructure)}
+      
+      INSTRUCCIONES CRÍTICAS DE REVISIÓN:
+      1. Divide tu análisis en: ESTRUCTURA (falta de secciones), CONTENIDO (calidad de redacción, objetivos, coherencia) e FORMATO (normas APA/citas).
+      2. REVISIÓN BIBLIOGRÁFICA (OBLIGATORIO): Busca la sección de Referencias o Bibliografía. Verifica meticulosamente que CADA entrada cumpla estrictamente con el formato APA 7ma Edición. Identifica errores específicos en el orden de los elementos, puntuación, uso de cursivas, sangría francesa o falta de datos críticos (DOI, links, editorial).
+      3. CITAS EN TEXTO: Verifica que las citas dentro del cuerpo del trabajo sigan el formato APA (Autor, Año) y que coincidan con la lista de referencias.
+      4. Sé MUY ESPECÍFICO. No des feedback genérico. Indica exactamente qué entrada bibliográfica está mal y por qué.
+      5. Genera al menos 5-8 hallazgos detallados si el documento es extenso.
+      6. El campo "aiSummary" debe ser una lista de observaciones clave en formato de viñetas (usando caracteres de viñeta como •), no un párrafo largo.
+      
+      RESPONDE ÚNICAMENTE EN FORMATO JSON con esta estructura exacta:
+      {
+        "findings": [
+          { 
+            "section": "Nombre de la Sección (ej: Referencias Bibliográficas)", 
+            "type": "STRUCTURE|CONTENT|FORMAT", 
+            "severity": "CRITICAL|MAJOR|MINOR|SUGGESTION", 
+            "description": "Explicación detallada del error de formato APA o contenido", 
+            "aiSuggestion": "Instrucción paso a paso para corregirlo según la norma APA 7",
+            "exampleImprovement": "Un ejemplo de cómo debería estar redactada la referencia o cita correctamente"
+          }
+        ],
+        "overallScore": 0-100,
+        "aiSummary": "• Observación 1\\n• Observación 2\\n• Observación 3"
+      }
+    `;
+
+    try {
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: submissionBuffer.toString('base64'),
+            mimeType: mimetype
+          }
+        }
+      ]);
+
+      const response = await result.response;
+      const text = response.text();
+      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(jsonStr);
+    } catch (error) {
+      this.logger.error(`Error en evaluación Gemini 2.5: ${error.message}`);
+      throw error;
+    }
+  }
+}
