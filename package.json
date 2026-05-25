@@ -7,9 +7,11 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
-  "devDependencies": {
-    "prettier": "^3.2.5",
+  "dependencies": {
     "turbo": "latest"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
   },
   "engines": {
     "node": ">=20.0.0"
