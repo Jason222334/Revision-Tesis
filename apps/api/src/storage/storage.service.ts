@@ -16,14 +16,27 @@ export class StorageService {
       secretKey: this.configService.get('MINIO_SECRET_KEY') || 'minioadmin',
     });
     this.bucketName = 'thesis-documents';
-    this.ensureBucketExists();
+    this.initializeStorage();
+  }
+
+  private async initializeStorage() {
+    try {
+      const exists = await this.minioClient.bucketExists(this.bucketName);
+      if (!exists) {
+        await this.minioClient.makeBucket(this.bucketName);
+      }
+      console.log('✅ MinIO Storage initialized');
+    } catch (error) {
+      console.error('❌ MinIO Storage connection failed. The application will continue but file uploads may fail:', error.message);
+    }
   }
 
   private async ensureBucketExists() {
-    const exists = await this.minioClient.bucketExists(this.bucketName);
-    if (!exists) {
-      await this.minioClient.makeBucket(this.bucketName);
-    }
+    // This is now handled by initializeStorage, but we keep the method for internal calls if needed
+    try {
+      const exists = await this.minioClient.bucketExists(this.bucketName);
+      if (!exists) await this.minioClient.makeBucket(this.bucketName);
+    } catch (e) {}
   }
 
   async uploadFile(file: Express.Multer.File, folder: string): Promise<string> {
