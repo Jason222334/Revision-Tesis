@@ -36,7 +36,7 @@ export default function GeneratePage() {
     "Finalizando documento PDF editable..."
   ]
 
-  const isAdmin = session?.user?.role === "ADMIN"
+  const isAdmin = (session?.user as any)?.role === "ADMIN"
 
   const fetchHistory = async () => {
     if (!isAdmin) return
